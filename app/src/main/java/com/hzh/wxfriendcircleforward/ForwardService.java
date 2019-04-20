@@ -2,10 +2,11 @@ package com.hzh.wxfriendcircleforward;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
-import android.annotation.TargetApi;
 import android.content.ClipboardManager;
+import android.content.Intent;
 import android.graphics.Path;
 import android.os.Build;
+import android.support.annotation.RequiresApi;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -25,25 +26,40 @@ public class ForwardService extends AccessibilityService {
     private Timer mTimer;
     private boolean flag = true;
     private int index;
+    private boolean isLongClick = false;
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        Log.d(TAG,"微信自动转发服务开启");
         list = new ArrayList<>();
     }
 
-    @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
+    @Override
+    public void onDestroy() {
+        Log.d(TAG,"服务停止");
+        super.onDestroy();
+    }
+
+    @Override
+    public boolean onUnbind(Intent intent) {
+        Log.d(TAG, "onUnbind: onUnbind");
+        return super.onUnbind(intent);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        Log.d(TAG, "onAccessibilityEvent");
         String className = event.getClassName().toString();
-        Log.d(TAG,"eventType="+event.getEventType()+",className="+ className);
+//        Log.d(TAG,"eventType="+event.getEventType()+",className="+ className);
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-        Log.d(TAG,"nodeInfo="+rootNode);
-        recycleLog(rootNode);
+//        Log.d(TAG,"nodeInfo="+rootNode);
+//        recycleLog(rootNode);
         switch (event.getEventType()){
             case AccessibilityEvent.TYPE_VIEW_CLICKED:
                 Log.d(TAG,"flag="+flag);
                 if (flag){
-                    if (className.equals("android.widget.LinearLayout")&&rootNode!=null&&rootNode.getContentDescription()!=null&&rootNode.getContentDescription().equals("当前所在页面,朋友圈")){
+                    if (rootNode!=null&&rootNode.getContentDescription()!=null&&rootNode.getContentDescription().equals("当前所在页面,朋友圈")){
                         flag = false;
                         index = 0;
                         String title = recycleText(rootNode);//获取消息文本
@@ -51,7 +67,7 @@ public class ForwardService extends AccessibilityService {
                         systemService.setText(title);//设置消息文本到剪切板
                         AccessibilityNodeInfo imgRootNode = recycleImageNode(rootNode);//获取图片集合的根节点
                         rootNode.recycle();
-                        Log.d(TAG,"imgNode="+imgRootNode);
+//                        Log.d(TAG,"imgNode="+imgRootNode);
                         if (imgRootNode!=null){
                             addImageNode(imgRootNode);//添加图片节点到list
                             if (list.size()>0){
@@ -61,13 +77,19 @@ public class ForwardService extends AccessibilityService {
                     }
                 }
                 break;
+            case AccessibilityEvent.TYPE_VIEW_LONG_CLICKED:
+                if (!isLongClick){
+                    Log.d(TAG,"---flag="+flag);
+                    flag = true;
+                }
+                break;
         }
     }
 
     /**
      * 点击进入大图界面
      */
-    @TargetApi(Build.VERSION_CODES.N)
+    @RequiresApi(api = Build.VERSION_CODES.N)
     private void saveImages() {
         AccessibilityNodeInfo nodeInfo = list.get(0);
         nodeInfo.performAction(AccessibilityNodeInfo.ACTION_CLICK);
@@ -78,23 +100,28 @@ public class ForwardService extends AccessibilityService {
      * 第一张图时，延迟长按
      * 最后一张图，单击退出
      */
-    @TargetApi(Build.VERSION_CODES.N)
+    @RequiresApi(api = Build.VERSION_CODES.N)
     private void saveSingleImage() {
         if (index == 0){
             Path path = new Path();
             path.moveTo(200,200);
             GestureDescription.Builder builder = new GestureDescription.Builder();
+            isLongClick = true;
             builder.addStroke(new GestureDescription.StrokeDescription(path,500,800));
             GestureDescription gestureDescription = builder.build();
             dispatchGesture(gestureDescription, new GestureResultCallback() {
                 @Override
                 public void onCompleted(GestureDescription gestureDescription) {
                     super.onCompleted(gestureDescription);
+                    Log.d(TAG,"onCompleted");
+                    isLongClick = false;
                     clickSaveImage();
                 }
 
                 @Override
                 public void onCancelled(GestureDescription gestureDescription) {
+                    Log.d(TAG,"onCancelled");
+                    isLongClick = false;
                     super.onCancelled(gestureDescription);
                 }
             }, null);
@@ -102,17 +129,20 @@ public class ForwardService extends AccessibilityService {
             Path path = new Path();
             path.moveTo(200,200);
             GestureDescription.Builder builder = new GestureDescription.Builder();
+            isLongClick = true;
             builder.addStroke(new GestureDescription.StrokeDescription(path,300,800));
             GestureDescription gestureDescription = builder.build();
             dispatchGesture(gestureDescription, new GestureResultCallback() {
                 @Override
                 public void onCompleted(GestureDescription gestureDescription) {
                     super.onCompleted(gestureDescription);
+                    isLongClick = false;
                     clickSaveImage();
                 }
 
                 @Override
                 public void onCancelled(GestureDescription gestureDescription) {
+                    isLongClick = false;
                     super.onCancelled(gestureDescription);
                 }
             }, null);
@@ -145,7 +175,7 @@ public class ForwardService extends AccessibilityService {
     /**
      * 点击toolbar上的照相机图标
      */
-    @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
+    @RequiresApi(api = Build.VERSION_CODES.N)
     private void clickMore() {
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         Log.d(TAG,"moreNode="+rootNode);
@@ -164,7 +194,7 @@ public class ForwardService extends AccessibilityService {
     /**
      * 点击从相册中选择
      */
-    @TargetApi(Build.VERSION_CODES.N)
+    @RequiresApi(api = Build.VERSION_CODES.N)
     private void clickSelectImageFormAlbum() {
         Path path = new Path();
         path.moveTo(getResources().getDisplayMetrics().widthPixels/2,getResources().getDisplayMetrics().heightPixels/2 + getResources().getDisplayMetrics().density*20);
@@ -199,19 +229,20 @@ public class ForwardService extends AccessibilityService {
     /**
      * 选择图片和视频界面
      */
-    @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
+    @RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN)
     private void selectPictures() {
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode!=null){
+            recycleLog(rootNode);
             AccessibilityNodeInfo gridView = getGridView(rootNode);
             if (gridView!=null){
                 getNeedView(gridView);
                 gridView.recycle();
             }
             AccessibilityNodeInfo completeButton = getCompleteButton(rootNode);
+            Log.d(TAG,"completeButton="+completeButton);
             if (completeButton!=null){
-                completeButton.getChild(0).performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                completeButton.getChild(0).recycle();
+                completeButton.performAction(AccessibilityNodeInfo.ACTION_CLICK);
                 completeButton.recycle();
                 if (mTimer!=null){
                     mTimer.cancel();
@@ -232,13 +263,15 @@ public class ForwardService extends AccessibilityService {
     /**
      * 发送信息界面
      */
-    @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
+    @RequiresApi(api = Build.VERSION_CODES.JELLY_BEAN)
     private void sendMessage() {
         AccessibilityNodeInfo rootNode = getRootInActiveWindow();
         if (rootNode!=null){
             AccessibilityNodeInfo editText = getEditText(rootNode);
             if (editText!=null){
                 editText.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                editText.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                editText.performAction(AccessibilityNodeInfo.ACTION_PASTE);
                 editText.recycle();
                 flag = true;
             }
@@ -265,14 +298,12 @@ public class ForwardService extends AccessibilityService {
      * @param rootNode
      */
     private AccessibilityNodeInfo getCompleteButton(AccessibilityNodeInfo rootNode) {
-        if (rootNode.getChildCount()>0){
-            if (rootNode.getClassName().equals("android.widget.LinearLayout")&&rootNode.getChild(0).getClassName().equals("android.widget.TextView")&&rootNode.getChild(0).getText()!=null&&rootNode.getChild(0).getText().toString().startsWith("完成")){
-                return rootNode;
-            }else{
-                for (int i = 0; i < rootNode.getChildCount(); i++) {
-                    AccessibilityNodeInfo completeButton = getCompleteButton(rootNode.getChild(i));
-                    if (completeButton!=null) return completeButton;
-                }
+        if (rootNode.getClassName().equals("android.widget.Button")&&rootNode.getText()!=null&&rootNode.getText().toString().startsWith("完成")){
+            return rootNode;
+        }else{
+            for (int i = 0; i < rootNode.getChildCount(); i++) {
+                AccessibilityNodeInfo completeButton = getCompleteButton(rootNode.getChild(i));
+                if (completeButton!=null) return completeButton;
             }
         }
         return null;
@@ -322,14 +353,12 @@ public class ForwardService extends AccessibilityService {
     }
 
     private AccessibilityNodeInfo getMoreButton(AccessibilityNodeInfo rootNode) {
-        if (rootNode.getChildCount()>0){
-            if (rootNode.getClassName().equals("android.widget.RelativeLayout")&&rootNode.isClickable()&&rootNode.getContentDescription()!=null&&rootNode.getContentDescription().toString().equals("更多功能按钮")){
-                return rootNode;
-            }else {
-                for (int i = 0; i < rootNode.getChildCount(); i++) {
-                    AccessibilityNodeInfo moreButton = getMoreButton(rootNode.getChild(i));
-                    if (moreButton!=null) return moreButton;
-                }
+        if (rootNode.getClassName().equals("android.widget.ImageButton")&&rootNode.isClickable()&&rootNode.getContentDescription()!=null&&rootNode.getContentDescription().toString().equals("拍照分享")){
+            return rootNode;
+        }else {
+            for (int i = 0; i < rootNode.getChildCount(); i++) {
+                AccessibilityNodeInfo moreButton = getMoreButton(rootNode.getChild(i));
+                if (moreButton!=null) return moreButton;
             }
         }
         return null;
@@ -338,7 +367,7 @@ public class ForwardService extends AccessibilityService {
     /**
      * 点击保存图片按钮，屏幕向左滑动
      */
-    @TargetApi(Build.VERSION_CODES.N)
+    @RequiresApi(api = Build.VERSION_CODES.N)
     private void clickSaveImage() {
         AccessibilityNodeInfo nodeInfo = getRootInActiveWindow();
         Log.d(TAG,"saveImgNodeInfo="+nodeInfo);
@@ -434,6 +463,7 @@ public class ForwardService extends AccessibilityService {
     private void recycleLog(AccessibilityNodeInfo nodeInfo) {
         if (nodeInfo!=null){
             if (nodeInfo.getChildCount()>0){
+                Log.d(TAG,"nodeInfoClassname:"+nodeInfo.getClassName()+"-----nodeInfoText:"+nodeInfo.getText()+"-----nodeInfoContentDescription:"+nodeInfo.getContentDescription()+"-----clickable:"+nodeInfo.isClickable());
 //                if (nodeInfo.getText()!=null){
 //                    Log.d(TAG,"nodeInfoText="+nodeInfo.getText().toString());
 //                }
@@ -441,9 +471,7 @@ public class ForwardService extends AccessibilityService {
                     recycleLog(nodeInfo.getChild(i));
                 }
             }else{
-                if (nodeInfo.getText()!=null){
-                    Log.d(TAG,"node="+nodeInfo.getText().toString());
-                }
+                Log.d(TAG,"nodeInfoClassname:"+nodeInfo.getClassName()+"-----nodeInfoText:"+nodeInfo.getText()+"-----nodeInfoContentDescription:"+nodeInfo.getContentDescription()+"-----clickable:"+nodeInfo.isClickable());
             }
         }
     }
